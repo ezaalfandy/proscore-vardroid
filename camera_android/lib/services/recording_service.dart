@@ -25,6 +25,7 @@ class RecordingService {
 
   /// Intended final path for the full recording (we move the camera output here at stop)
   String? _currentVideoPath;
+  String? _currentSessionName;
 
   // Camera settings
   List<CameraDescription> _availableCameras = [];
@@ -183,12 +184,19 @@ class RecordingService {
 
     try {
       // Create session directory structure
-      final baseDir = await _getSessionBaseDirectory(eventId, matchId, sessionId);
+      final safeEventName = _sanitizePathSegment(eventId, fallback: 'Event');
+      final safeSessionName = _sanitizePathSegment(matchId, fallback: 'Session');
+      _currentSessionName = safeSessionName;
+      final baseDir = await _getSessionBaseDirectory(
+        safeEventName,
+        safeSessionName,
+        sessionId,
+      );
       final clipsDir = Directory('$baseDir/clips');
       await clipsDir.create(recursive: true);
 
       // Intended final path for the full match video (we move it here on stop)
-      _currentVideoPath = '$baseDir/full_recording.mp4';
+      _currentVideoPath = '$baseDir/$safeSessionName.mp4';
 
       _currentSession = RecordingSession(
         sessionId: sessionId,
@@ -260,6 +268,7 @@ class RecordingService {
     } finally {
       _recordingStartTime = null;
       _currentVideoPath = null;
+      _currentSessionName = null;
     }
   }
 
@@ -528,7 +537,14 @@ class RecordingService {
   ) async {
     final baseDir = await _getVarBaseDirectory();
     final deviceId = sessionId.split('-').first;
-    return '$baseDir/Event_$eventId/Match_$matchId/Cam_$deviceId';
+    return '$baseDir/$eventId/$matchId/Cam_$deviceId';
+  }
+
+  String _sanitizePathSegment(String value, {required String fallback}) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return fallback;
+    final sanitized = trimmed.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_');
+    return sanitized.isEmpty ? fallback : sanitized;
   }
 
   /// Change camera resolution (only when not recording)

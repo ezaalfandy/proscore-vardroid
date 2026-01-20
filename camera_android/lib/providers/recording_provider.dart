@@ -6,12 +6,16 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:var_protocol/var_protocol.dart';
 import '../services/recording_service.dart';
 import '../services/websocket_client_service.dart';
+import '../services/clip_server_service.dart';
+import '../services/network_service.dart';
 import '../models/recording_session.dart';
 import 'connection_provider.dart';
 
 /// Provider for managing recording functionality
 class RecordingProvider with ChangeNotifier {
   final RecordingService _recordingService = RecordingService();
+  final ClipServerService _clipServerService = ClipServerService();
+  final NetworkService _networkService = NetworkService();
   final ConnectionProvider _connectionProvider;
 
   StreamSubscription? _messageSubscription;
@@ -199,18 +203,39 @@ class RecordingProvider with ChangeNotifier {
       );
 
       if (clip != null) {
-        // Generate HTTP URL for clip
-        // Note: This requires implementing the HTTP server
-        // For now, we'll use a placeholder
-        final clipUrl = 'http://localhost:9000/clips/${clip.clipId}.mp4';
+        // Ensure clip server is running
+        if (!_clipServerService.isRunning) {
+          final localIp = await _networkService.getLocalIp();
+          if (localIp == null) {
+            _connectionProvider.sendError(
+              code: VarErrorCode.clipExportFailed,
+              message: 'Could not determine device IP address',
+            );
+            return;
+          }
+          await _clipServerService.startServer(localIp: localIp);
+        }
 
-        _connectionProvider.sendClipReady(
+        // Register clip with the server and get the download URL
+        final clipUrl = _clipServerService.registerClip(
           clipId: clip.clipId,
-          markId: markId,
-          url: clipUrl,
-          durationMs: clip.durationMs,
-          sizeBytes: clip.sizeBytes,
+          filePath: clip.filePath,
         );
+
+        if (clipUrl != null) {
+          _connectionProvider.sendClipReady(
+            clipId: clip.clipId,
+            markId: markId,
+            url: clipUrl,
+            durationMs: clip.durationMs,
+            sizeBytes: clip.sizeBytes,
+          );
+        } else {
+          _connectionProvider.sendError(
+            code: VarErrorCode.clipExportFailed,
+            message: 'Failed to register clip for download',
+          );
+        }
       } else {
         _connectionProvider.sendError(
           code: VarErrorCode.clipExportFailed,
@@ -359,6 +384,7 @@ class RecordingProvider with ChangeNotifier {
   void dispose() {
     _messageSubscription?.cancel();
     _recordingService.disposeCamera();
+    _clipServerService.dispose();
     super.dispose();
   }
 }

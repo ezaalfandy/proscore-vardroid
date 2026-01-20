@@ -55,11 +55,19 @@ dependencies:
   # UUID generation
   uuid: ^4.5.1
 
+  # Date formatting
+  intl: ^0.19.0
+
   # HTTP client for clip downloads
   http: ^1.2.2
 
   # Video player for replay
   video_player: ^2.9.2
+
+  # Advanced video playback with media_kit
+  media_kit: ^1.1.10+1
+  media_kit_video: ^1.0.10
+  media_kit_libs_windows_video: ^1.0.9
 
   # State management
   provider: ^6.1.2

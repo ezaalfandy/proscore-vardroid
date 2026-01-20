@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:var_protocol/var_protocol.dart';
 
@@ -79,7 +78,10 @@ class WebSocketClientService {
 
   /// Send a message to coordinator
   void sendMessage(BaseMessage message) {
-    if (_connectionState != VarConnectionState.connected || _channel == null) {
+    // Allow sending when connected or paired
+    if ((_connectionState != VarConnectionState.connected &&
+            _connectionState != VarConnectionState.paired) ||
+        _channel == null) {
       return;
     }
 
@@ -271,6 +273,104 @@ class WebSocketClientService {
     sendMessage(errorMessage);
   }
 
+  /// Send preview available message
+  void sendPreviewAvailable({
+    required String url,
+    required int width,
+    required int height,
+    required int fps,
+  }) {
+    if (_deviceId == null) return;
+
+    final message = PreviewAvailableMessage(
+      deviceId: _deviceId!,
+      url: url,
+      width: width,
+      height: height,
+      fps: fps,
+    );
+
+    sendMessage(message);
+  }
+
+  /// Send preview stopped message
+  void sendPreviewStopped() {
+    if (_deviceId == null) return;
+
+    final message = PreviewStoppedMessage(
+      deviceId: _deviceId!,
+    );
+
+    sendMessage(message);
+  }
+
+  /// Send playback ready message
+  void sendPlaybackReady({
+    required String url,
+    required int durationMs,
+    required int width,
+    required int height,
+    required int fps,
+  }) {
+    if (_deviceId == null) return;
+
+    final message = PlaybackReadyMessage(
+      deviceId: _deviceId!,
+      url: url,
+      durationMs: durationMs,
+      width: width,
+      height: height,
+      fps: fps,
+    );
+
+    sendMessage(message);
+  }
+
+  /// Send playback status message
+  void sendPlaybackStatus({
+    required int positionMs,
+    required bool isPlaying,
+    required double speed,
+  }) {
+    if (_deviceId == null) return;
+
+    final message = PlaybackStatusMessage(
+      deviceId: _deviceId!,
+      positionMs: positionMs,
+      isPlaying: isPlaying,
+      speed: speed,
+    );
+
+    sendMessage(message);
+  }
+
+  /// Send playback stopped message
+  void sendPlaybackStopped() {
+    if (_deviceId == null) return;
+
+    final message = PlaybackStoppedMessage(
+      deviceId: _deviceId!,
+    );
+
+    sendMessage(message);
+  }
+
+  /// Send playback error message
+  void sendPlaybackError({
+    required String code,
+    required String message,
+  }) {
+    if (_deviceId == null) return;
+
+    final errorMessage = PlaybackErrorMessage(
+      deviceId: _deviceId!,
+      code: code,
+      message: message,
+    );
+
+    sendMessage(errorMessage);
+  }
+
   void _onMessage(dynamic data) {
     try {
       final message = MessageParser.parse(data as String);
@@ -283,6 +383,9 @@ class WebSocketClientService {
   }
 
   void _onError(error) {
+    _subscription?.cancel();
+    _subscription = null;
+    _channel = null;
     _updateConnectionState(VarConnectionState.error);
   }
 

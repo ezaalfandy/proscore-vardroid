@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:camera/camera.dart';
 import 'package:permission_handler/permission_handler.dart';
+import '../../../../providers/preview_provider.dart';
 import '../../../../providers/recording_provider.dart';
 import '../../../theme/app_colors.dart';
 import 'focus_exposure_control.dart';
@@ -92,6 +93,8 @@ class _CameraPreviewWidgetState extends State<CameraPreviewWidget> {
             ),
           );
         }
+
+        context.read<PreviewProvider>().setCameraController(controller);
 
         final previewSize = controller.value.previewSize;
         if (previewSize == null) {

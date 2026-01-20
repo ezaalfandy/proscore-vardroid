@@ -88,6 +88,9 @@ class ConnectionProvider with ChangeNotifier {
       await _storage.setCoordinatorHost(host);
       await _storage.setCoordinatorPort(port);
 
+      // Ensure clean state before reconnecting
+      await _wsService.disconnect();
+
       // Initialize WebSocket client
       _wsService.init(
         deviceId: _deviceId!,
@@ -331,6 +334,11 @@ class ConnectionProvider with ChangeNotifier {
       case VarProtocol.msgDisconnect:
         _handleDisconnect(message as DisconnectMessage);
         break;
+      // Preview messages are handled but forwarded via callback
+      case VarProtocol.msgStartPreview:
+      case VarProtocol.msgStopPreview:
+        // These are handled by PreviewProvider via the message stream
+        break;
       // Other message types are handled by respective providers
       default:
         break;
@@ -339,11 +347,13 @@ class ConnectionProvider with ChangeNotifier {
 
   void _handlePairAccept(PairAcceptMessage message) async {
     _cancelConnectionTimeout();
+    _errorMessage = null;
     await _storage.setDeviceKey(message.deviceKey);
     await _storage.setAssignedName(message.assignedName);
     _assignedName = message.assignedName;
     _updateConnectionState(VarConnectionState.paired);
     _startStatusHeartbeat();
+    await _sendStatus();
   }
 
   void _handlePairReject(PairRejectMessage message) {
@@ -355,10 +365,12 @@ class ConnectionProvider with ChangeNotifier {
 
   void _handleAuthOk(AuthOkMessage message) async {
     _cancelConnectionTimeout();
+    _errorMessage = null;
     await _storage.setAssignedName(message.assignedName);
     _assignedName = message.assignedName;
     _updateConnectionState(VarConnectionState.paired);
     _startStatusHeartbeat();
+    await _sendStatus();
   }
 
   void _handleAuthFailed(AuthFailedMessage message) async {
@@ -387,6 +399,8 @@ class ConnectionProvider with ChangeNotifier {
 
     if (state == VarConnectionState.disconnected || state == VarConnectionState.error) {
       _stopStatusHeartbeat();
+    } else if (state == VarConnectionState.connected) {
+      _startStatusHeartbeat();
     }
   }
 
@@ -414,6 +428,9 @@ class ConnectionProvider with ChangeNotifier {
 
     final status = await _statusService.getStatus();
 
+    print(
+      'Status heartbeat battery=${status.battery} temp=${status.temperature} free=${status.freeSpaceMB} recording=${_currentSessionId != null}',
+    );
     _wsService.sendStatus(
       sessionId: _currentSessionId,
       battery: status.battery,
